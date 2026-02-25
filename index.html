@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Shopify File Exporter</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f6f6f7; color: #333; }
+    .container { max-width: 900px; margin: 40px auto; padding: 0 20px; }
+    h1 { font-size: 24px; margin-bottom: 8px; color: #1a1a1a; }
+    p.subtitle { color: #666; margin-bottom: 30px; }
+
+    .card { background: white; border-radius: 12px; padding: 30px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 20px; }
+
+    .input-group { display: flex; gap: 10px; }
+    input[type="text"] {
+      flex: 1; padding: 10px 14px; border: 1px solid #ddd;
+      border-radius: 8px; font-size: 14px; outline: none;
+    }
+    input[type="text"]:focus { border-color: #5c6ac4; }
+
+    button {
+      padding: 10px 20px; background: #5c6ac4; color: white;
+      border: none; border-radius: 8px; font-size: 14px;
+      cursor: pointer; transition: background 0.2s;
+    }
+    button:hover { background: #4959bd; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+
+    .btn-export {
+      background: #108043; margin-bottom: 16px;
+    }
+    .btn-export:hover { background: #0d6b37; }
+
+    #status { margin-top: 12px; font-size: 14px; color: #666; }
+    #status.error { color: #d82c0d; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 10px 12px; background: #f6f6f7; border-bottom: 2px solid #e0e0e0; color: #555; }
+    td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; word-break: break-all; }
+    tr:hover td { background: #fafafa; }
+    td a { color: #5c6ac4; text-decoration: none; }
+    td a:hover { text-decoration: underline; }
+
+    .badge { display: inline-block; background: #e3e8f7; color: #5c6ac4; padding: 2px 8px; border-radius: 20px; font-size: 12px; margin-left: 8px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Shopify File Exporter</h1>
+    <p class="subtitle">Tarik semua nama file dan URL dari Shopify CDN kamu.</p>
+
+    <!-- Connect Section -->
+    <div class="card" id="connect-section">
+      <h2 style="font-size:16px;margin-bottom:16px;">Connect ke Shopify Store</h2>
+      <div class="input-group">
+        <input type="text" id="shop-input" placeholder="your-store.myshopify.com" />
+        <button onclick="connectShopify()">Connect</button>
+      </div>
+      <div id="status"></div>
+    </div>
+
+    <!-- Result Section -->
+    <div class="card hidden" id="result-section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="font-size:16px;">
+          File List <span class="badge" id="total-badge">0</span>
+        </h2>
+        <button class="btn-export" onclick="exportCSV()">⬇ Export CSV</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Filename</th>
+            <th>URL</th>
+          </tr>
+        </thead>
+        <tbody id="file-table"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    let allFiles = [];
+
+    // Cek kalau balik dari OAuth
+    window.onload = () => {
+      const params = new URLSearchParams(window.location.search);
+      const shop = params.get("shop");
+      const token = params.get("token");
+      if (shop && token) {
+        document.getElementById("connect-section").querySelector("input").value = shop;
+        setStatus("Terhubung! Sedang mengambil file...");
+        fetchFiles(shop, token);
+      }
+    };
+
+    function connectShopify() {
+      const shop = document.getElementById("shop-input").value.trim();
+      if (!shop) return setStatus("Masukkan domain toko kamu.", true);
+      const cleanShop = shop.replace("https://", "").replace("/", "");
+      window.location.href = `/auth?shop=${cleanShop}`;
+    }
+
+    async function fetchFiles(shop, token) {
+      try {
+        const res = await fetch("/api/files", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ shop, token }),
+        });
+        const data = await res.json();
+        if (data.error) return setStatus("Error: " + JSON.stringify(data.error), true);
+
+        allFiles = data.files;
+        renderTable(allFiles);
+        setStatus(`Berhasil! ${data.total} file ditemukan.`);
+      } catch (err) {
+        setStatus("Gagal mengambil file: " + err.message, true);
+      }
+    }
+
+    function renderTable(files) {
+      const tbody = document.getElementById("file-table");
+      const resultSection = document.getElementById("result-section");
+      const totalBadge = document.getElementById("total-badge");
+
+      tbody.innerHTML = files.map((f, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${f.filename}</td>
+          <td><a href="${f.url}" target="_blank">${f.url}</a></td>
+        </tr>
+      `).join("");
+
+      totalBadge.textContent = files.length;
+      resultSection.classList.remove("hidden");
+    }
+
+    function exportCSV() {
+      if (!allFiles.length) return;
+      const rows = [["filename", "url"], ...allFiles.map(f => [f.filename, f.url])];
+      const csv = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "shopify_files.csv";
+      a.click();
+    }
+
+    function setStatus(msg, isError = false) {
+      const el = document.getElementById("status");
+      el.textContent = msg;
+      el.className = isError ? "error" : "";
+    }
+  </script>
+</body>
+</html>
