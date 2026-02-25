@@ -1,73 +1,18 @@
 const express = require("express");
 const axios = require("axios");
-const crypto = require("crypto");
 require("dotenv").config();
 
 const app = express();
 app.use(express.static("public"));
 app.use(express.json());
 
-const { CLIENT_ID, CLIENT_SECRET, REDIRECT_URI } = process.env;
-const SCOPES = "read_files";
+const { SHOP, ACCESS_TOKEN, PORT = 3000 } = process.env;
 
-// Step 1: Redirect ke Shopify OAuth
-app.get("/auth", (req, res) => {
-  const shop = req.query.shop;
-  if (!shop) return res.status(400).send("Missing shop parameter");
-
-  const authUrl =
-    `https://${shop}/admin/oauth/authorize` +
-    `?client_id=${CLIENT_ID}` +
-    `&scope=${SCOPES}` +
-    `&redirect_uri=${REDIRECT_URI}` +
-    `&response_type=code`;
-
-  res.redirect(authUrl);
-});
-
-// Step 2: Shopify redirect ke sini dengan code
-app.get("/auth/callback", async (req, res) => {
-  const { shop, code, hmac } = req.query;
-
-  // Validasi HMAC
-  const params = Object.entries(req.query)
-    .filter(([k]) => k !== "hmac")
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${k}=${v}`)
-    .join("&");
-
-  const digest = crypto
-    .createHmac("sha256", CLIENT_SECRET)
-    .update(params)
-    .digest("hex");
-
-  if (digest !== hmac) {
-    return res.status(401).send("HMAC validation failed");
+// API untuk ambil list files menggunakan token dari .env
+app.get("/api/files", async (req, res) => {
+  if (!SHOP || !ACCESS_TOKEN) {
+    return res.status(500).json({ error: "SHOP atau ACCESS_TOKEN belum diatur di .env" });
   }
-
-  // Tukar code dengan access token
-  try {
-    const response = await axios.post(
-      `https://${shop}/admin/oauth/access_token`,
-      {
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        code,
-      }
-    );
-
-    const accessToken = response.data.access_token;
-    res.redirect(`/?shop=${shop}&token=${accessToken}`);
-  } catch (err) {
-    console.error(err.response?.data || err.message);
-    res.status(500).send("Failed to get access token");
-  }
-});
-
-// Step 3: Fetch semua files via GraphQL
-app.post("/api/files", async (req, res) => {
-  const { shop, token } = req.body;
-  if (!shop || !token) return res.status(400).json({ error: "Missing shop or token" });
 
   const query = `
     query getFiles($cursor: String) {
@@ -97,11 +42,11 @@ app.post("/api/files", async (req, res) => {
   try {
     while (hasNextPage) {
       const response = await axios.post(
-        `https://${shop}/admin/api/2026-01/graphql.json`,
+        `https://${SHOP}/admin/api/2026-01/graphql.json`,
         { query, variables: { cursor } },
         {
           headers: {
-            "X-Shopify-Access-Token": token,
+            "X-Shopify-Access-Token": ACCESS_TOKEN,
             "Content-Type": "application/json",
           },
         }
@@ -131,9 +76,16 @@ app.post("/api/files", async (req, res) => {
     res.json({ files: allFiles, total: allFiles.length });
   } catch (err) {
     console.error(err.response?.data || err.message);
-    res.status(500).json({ error: "Failed to fetch files" });
+    res.status(500).json({ error: "Gagal mengambil file" });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+const server = app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+
+server.on('error', (e) => {
+  if (e.code === 'EADDRINUSE') {
+    console.error(`Error: Port ${PORT} is already in use. Try a different port.`);
+  } else {
+    console.error(e);
+  }
+});
