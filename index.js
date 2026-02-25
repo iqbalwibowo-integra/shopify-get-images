@@ -11,7 +11,7 @@ const { SHOP, ACCESS_TOKEN, PORT = 3000 } = process.env;
 // API untuk ambil list files menggunakan token dari .env
 app.get("/api/files", async (req, res) => {
   if (!SHOP || !ACCESS_TOKEN) {
-    return res.status(500).json({ error: "SHOP atau ACCESS_TOKEN belum diatur di .env" });
+    return res.status(500).json({ error: "SHOP atau ACCESS_TOKEN belum diatur di Environment Variables" });
   }
 
   const query = `
@@ -57,34 +57,38 @@ app.get("/api/files", async (req, res) => {
         return res.status(400).json({ error: data.errors });
       }
 
-      const edges = data.data.files.edges;
-      edges.forEach(({ node }) => {
-        let url = null;
-        if (node.image?.url) url = node.image.url;
-        else if (node.url) url = node.url;
+      const filesData = data.data.files;
+      if (filesData && filesData.edges) {
+        filesData.edges.forEach(({ node }) => {
+          let url = null;
+          if (node.image?.url) url = node.image.url;
+          else if (node.url) url = node.url;
 
-        if (url) {
-          const filename = url.split("/").pop().split("?")[0];
-          allFiles.push({ filename, url });
-        }
-      });
+          if (url) {
+            const filename = url.split("/").pop().split("?")[0];
+            allFiles.push({ filename, url });
+          }
+        });
 
-      hasNextPage = data.data.files.pageInfo.hasNextPage;
-      cursor = data.data.files.pageInfo.endCursor;
+        hasNextPage = filesData.pageInfo.hasNextPage;
+        cursor = filesData.pageInfo.endCursor;
+      } else {
+        hasNextPage = False;
+      }
     }
 
     res.json({ files: allFiles, total: allFiles.length });
   } catch (err) {
     console.error(err.response?.data || err.message);
-    res.status(500).json({ error: "Gagal mengambil file" });
+    res.status(500).json({ error: "Gagal mengambil data dari Shopify API" });
   }
 });
 
-const server = app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+const server = app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 server.on('error', (e) => {
   if (e.code === 'EADDRINUSE') {
-    console.error(`Error: Port ${PORT} is already in use. Try a different port.`);
+    console.error(`Error: Port ${PORT} sudah digunakan.`);
   } else {
     console.error(e);
   }
