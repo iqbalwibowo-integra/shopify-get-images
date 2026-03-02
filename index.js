@@ -21,7 +21,7 @@ app.get("/api/files", async (req, res) => {
         edges {
           node {
             ... on MediaImage {
-              image { url }
+              image { url altText}
             }
             ... on GenericFile {
               url
@@ -62,19 +62,19 @@ app.get("/api/files", async (req, res) => {
       if (filesData && filesData.edges) {
         filesData.edges.forEach(({ node }) => {
           let url = null;
-          if (node.image?.url) url = node.image.url;
-          else if (node.url) url = node.url;
-
-          if (url) {
-            const filename = url.split("/").pop().split("?")[0];
-            allFiles.push({ filename, url });
+          if (node.image?.url) {
+            url = node.image.url;
+            allFiles.push({ filename: url.split("/").pop().split("?")[0], url, alt: node.image.altText || "" });
+          } else if (node.url) {
+            url = node.url;
+            allFiles.push({ filename: url.split("/").pop().split("?")[0], url, alt: "" });
           }
         });
 
         hasNextPage = filesData.pageInfo.hasNextPage;
         cursor = filesData.pageInfo.endCursor;
       } else {
-        hasNextPage = False;
+        hasNextPage = false;
       }
     }
 
