@@ -168,6 +168,7 @@
             <tr>
               <th style="width: 50px;">#</th>
               <th>Filename</th>
+              <th>Alt Text</th>
               <th>URL</th>
             </tr>
           </thead>
@@ -219,6 +220,7 @@
         <tr>
           <td>${i + 1}</td>
           <td><strong>${f.filename}</strong></td>
+          <td>${f.alt || "-"}</td>
           <td><a href="${f.url}" target="_blank">${f.url}</a></td>
         </tr>
       `).join("");
@@ -228,7 +230,7 @@
 
     function exportCSV() {
       if (!allFiles.length) return;
-      const rows = [["filename", "url"], ...allFiles.map(f => [f.filename, f.url])];
+      const rows = [["filename", "alt", "url"], ...allFiles.map(f => [f.filename, f.alt || "", f.url])];
       const csv = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
